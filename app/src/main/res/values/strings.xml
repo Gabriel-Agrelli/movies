@@ -1,0 +1,10 @@
+<resources>
+    <string name="app_name">Filmes</string>
+    <string name="sinopse">Sinopse</string>
+    <string name="release_date">Data de lançamento</string>
+    <string name="vote_average">Avaliação</string>
+    <string name="error_fetch_data">Não foi possível listar os filmes.\nVerifque sua conexão com a internet.</string>
+
+    <string name="poster_content_description">Poster do filme</string>
+</resources>
+
