@@ -23,8 +23,7 @@ public class MovieAdapter extends RecyclerView.Adapter<MovieAdapter.MoviesViewHo
     private List<Movie> mMoviesArray;
     private OnClickHandler mClickHandler;
 
-    public MovieAdapter(List<Movie> mMoviesArray, OnClickHandler mClickHandler) {
-        this.mMoviesArray = mMoviesArray;
+    public MovieAdapter(OnClickHandler mClickHandler) {
         this.mClickHandler = mClickHandler;
     }
 
@@ -67,5 +66,10 @@ public class MovieAdapter extends RecyclerView.Adapter<MovieAdapter.MoviesViewHo
 
     public interface OnClickHandler {
         void OnClickHandler(Movie Movie);
+    }
+
+    public void setMovies(List<Movie> movies) {
+        mMoviesArray = movies;
+        notifyDataSetChanged();
     }
 }

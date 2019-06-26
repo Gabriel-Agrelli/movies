@@ -1,5 +1,6 @@
 package com.example.movies.activity;
 
+import androidx.annotation.NonNull;
 import androidx.appcompat.app.AppCompatActivity;
 import androidx.recyclerview.widget.GridLayoutManager;
 import androidx.recyclerview.widget.RecyclerView;
@@ -9,6 +10,7 @@ import android.content.Intent;
 import android.content.res.Configuration;
 import android.os.Bundle;
 import android.view.View;
+import android.widget.AbsListView;
 import android.widget.TextView;
 
 import com.example.movies.BuildConfig;
@@ -44,6 +46,14 @@ public class MainActivity extends AppCompatActivity implements MovieAdapter.OnCl
 
     public static final String MOVIES = "movies";
     public static final String MOVIE = "movie";
+    public static final String CURRENT_PAGE = "current_page";
+    public static final String TOTAL_PAGES = "total_pages";
+
+    private GridLayoutManager gridLayoutManager;
+    private int current_page = 1;
+    private int total_pages;
+    private boolean isScrolling = false;
+    private int currentItems, totalItems, scrollOutItems;
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
@@ -51,23 +61,69 @@ public class MainActivity extends AppCompatActivity implements MovieAdapter.OnCl
         setContentView(R.layout.activity_main);
         ButterKnife.bind(this);
 
-        mSwipeRefreshLayout.setOnRefreshListener(() -> listMovies());
+        mMovieAdapter = new MovieAdapter(MainActivity.this);
+        gridLayoutManager = new GridLayoutManager(this, 2);
 
-        if (savedInstanceState != null && savedInstanceState.containsKey(MOVIES)) {
-            movies = savedInstanceState.getParcelableArrayList(MOVIES);
-            setMoviesAdapter();
+        if (this.getResources().getConfiguration().orientation == Configuration.ORIENTATION_PORTRAIT) {
+            mRecyclerView.setLayoutManager(gridLayoutManager);
         } else {
-            listMovies();
+            gridLayoutManager.setSpanCount(3);
+            mRecyclerView.setLayoutManager(gridLayoutManager);
+        }
+        mRecyclerView.setHasFixedSize(true);
+        mRecyclerView.setAdapter(mMovieAdapter);
+        mRecyclerView.addOnScrollListener(new RecyclerView.OnScrollListener() {
+            @Override
+            public void onScrollStateChanged(@NonNull RecyclerView recyclerView, int newState) {
+                super.onScrollStateChanged(recyclerView, newState);
+                if (newState == AbsListView.OnScrollListener.SCROLL_STATE_TOUCH_SCROLL) {
+                    isScrolling = true;
+                }
+            }
+
+            @Override
+            public void onScrolled(@NonNull RecyclerView recyclerView, int dx, int dy) {
+                super.onScrolled(recyclerView, dx, dy);
+                currentItems = gridLayoutManager.getChildCount();
+                totalItems = gridLayoutManager.getItemCount();
+                scrollOutItems = gridLayoutManager.findFirstVisibleItemPosition();
+
+                if (isScrolling && (currentItems + scrollOutItems == totalItems)) {
+                    if (current_page < total_pages) {
+                        isScrolling = false;
+                        loadMovies(current_page + 1);
+                    }
+                }
+            }
+        });
+
+        mSwipeRefreshLayout.setOnRefreshListener(() -> {
+            movies.clear();
+            mMovieAdapter.setMovies(null);
+            loadMovies(1);
+        });
+
+        if (savedInstanceState != null) {
+            movies = savedInstanceState.getParcelableArrayList(MOVIES);
+            current_page = savedInstanceState.getInt(CURRENT_PAGE);
+            total_pages = savedInstanceState.getInt(TOTAL_PAGES);
+            mMovieAdapter.setMovies(movies);
+        } else {
+            loadMovies(current_page);
         }
     }
 
-    private void listMovies() {
+    private void loadMovies(int page) {
         if (NetworkUtils.isNetworkConnected(this)) {
             Retrofit retrofit = ApiService.getInstance();
             api = retrofit.create(Api.class);
 
-            api.listMovies(BuildConfig.api_key)
-                    .flatMap(movieResult -> Observable.fromIterable(movieResult.getResult()))
+            api.listMovies(page, BuildConfig.api_key)
+                    .flatMap(movieResult -> {
+                        current_page = Integer.parseInt(movieResult.getPage());
+                        total_pages = Integer.parseInt(movieResult.getTotalPages());
+                        return Observable.fromIterable(movieResult.getResult());
+                    })
                     .flatMap(movie -> Observable.just(new Movie(movie.getId(), movie.getTitle(), movie.getPoster(), movie.getReleaseDate(), movie.getOverview(), movie.getVoteAverage())))
                     .subscribeOn(Schedulers.io())
                     .observeOn(AndroidSchedulers.mainThread())
@@ -91,26 +147,13 @@ public class MainActivity extends AppCompatActivity implements MovieAdapter.OnCl
 
                         @Override
                         public void onComplete() {
-                            setMoviesAdapter();
+                            mSwipeRefreshLayout.setRefreshing(false);
+                            mMovieAdapter.setMovies(movies);
                         }
                     });
         } else {
             showNetworkError();
         }
-    }
-
-    private void setMoviesAdapter() {
-        mMovieAdapter = new MovieAdapter(movies, MainActivity.this);
-
-        if (this.getResources().getConfiguration().orientation == Configuration.ORIENTATION_LANDSCAPE) {
-            mRecyclerView.setLayoutManager(new GridLayoutManager(MainActivity.this, 3));
-        } else {
-            mRecyclerView.setLayoutManager(new GridLayoutManager(MainActivity.this, 2));
-        }
-
-        mRecyclerView.setHasFixedSize(true);
-        mRecyclerView.setAdapter(mMovieAdapter);
-        mSwipeRefreshLayout.setRefreshing(false);
     }
 
     private void showNetworkError() {
@@ -123,6 +166,8 @@ public class MainActivity extends AppCompatActivity implements MovieAdapter.OnCl
     @Override
     protected void onSaveInstanceState(Bundle outState) {
         outState.putParcelableArrayList(MOVIES, movies);
+        outState.putInt(CURRENT_PAGE, current_page);
+        outState.putInt(TOTAL_PAGES, total_pages);
         super.onSaveInstanceState(outState);
     }
 
